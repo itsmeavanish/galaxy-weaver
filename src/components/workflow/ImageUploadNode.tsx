@@ -1,15 +1,17 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Image, X, Upload } from 'lucide-react';
+import { Image, X, Upload, Copy } from 'lucide-react';
 import { useWorkflowStore, NodeData } from '@/stores/workflowStore';
 
 export const ImageUploadNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
+  const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       const files = Array.from(e.dataTransfer.files).filter((file) =>
         file.type.startsWith('image/')
       );
@@ -66,12 +68,21 @@ export const ImageUploadNode = memo(({ id, data, selected }: NodeProps<NodeData>
             {data.label || 'Image Upload'}
           </span>
         </div>
-        <button
-          onClick={() => deleteNode(id)}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors"
-        >
-          <X className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => duplicateNode(id)}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+            title="Duplicate node"
+          >
+            <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => deleteNode(id)}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+          >
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
       </div>
       
       <div className="p-4">
@@ -97,8 +108,8 @@ export const ImageUploadNode = memo(({ id, data, selected }: NodeProps<NodeData>
         
         <label
           onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors nodrag"
         >
           <Upload className="w-6 h-6 text-muted-foreground mb-2" />
           <span className="text-xs text-muted-foreground">

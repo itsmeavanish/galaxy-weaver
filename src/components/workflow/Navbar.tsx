@@ -1,26 +1,28 @@
-import { Save, Download, Rocket, RotateCcw } from 'lucide-react';
+import { Save, Download, Rocket, RotateCcw, Undo, Redo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useWorkflowStore } from '@/stores/workflowStore';
+import { useWorkflowStore, useTemporalStore } from '@/stores/workflowStore';
 import { toast } from 'sonner';
 
 export function Navbar() {
-  const { nodes, edges, resetWorkflow, loadSampleWorkflow } = useWorkflowStore();
+  const { nodes, edges, resetWorkflow, loadSampleWorkflow, saveToLocalStorage, exportToJSON } = useWorkflowStore();
+  const temporalStore = useTemporalStore();
+  const { undo, redo, pastStates, futureStates } = temporalStore;
+
+  const canUndo = pastStates.length > 0;
+  const canRedo = futureStates.length > 0;
 
   const handleSave = () => {
-    const workflow = { nodes, edges };
-    localStorage.setItem('weavy-workflow', JSON.stringify(workflow));
+    saveToLocalStorage();
     toast.success('Workflow saved locally!');
   };
 
   const handleExport = () => {
-    const workflow = { nodes, edges };
-    const blob = new Blob([JSON.stringify(workflow, null, 2)], {
-      type: 'application/json',
-    });
+    const json = exportToJSON();
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'weavy-workflow.json';
+    a.download = `weavy-workflow-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Workflow exported!');
@@ -32,13 +34,48 @@ export function Navbar() {
     toast.success('Workflow reset to sample!');
   };
 
+  const handleUndo = () => {
+    if (canUndo) {
+      undo();
+      toast.info('Undid last action');
+    }
+  };
+
+  const handleRedo = () => {
+    if (canRedo) {
+      redo();
+      toast.info('Redid action');
+    }
+  };
+
   const handleDeploy = () => {
-    toast.info('Connect to Lovable Cloud to deploy workflows!');
+    toast.info('Workflow deployment coming soon!');
   };
 
   return (
     <nav className="h-14 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4">
       <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleUndo}
+          disabled={!canUndo}
+          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRedo}
+          disabled={!canRedo}
+          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+          title="Redo (Ctrl+Y)"
+        >
+          <Redo className="w-4 h-4" />
+        </Button>
+        <div className="w-px h-6 bg-border mx-2" />
         <Button
           variant="ghost"
           size="sm"

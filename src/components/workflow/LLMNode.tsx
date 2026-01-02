@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Bot, X, Play, Loader2 } from 'lucide-react';
+import { Bot, X, Play, Loader2, Copy } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { useWorkflowStore, NodeData } from '@/stores/workflowStore';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -9,51 +10,24 @@ import { toast } from 'sonner';
 export const LLMNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
-  const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
-  const [isLoading, setIsLoading] = useState(false);
+  const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
+  const runLLMNode = useWorkflowStore((state) => state.runLLMNode);
+  const runningNodes = useWorkflowStore((state) => state.runningNodes);
+  
+  const isLoading = runningNodes.has(id) || data.isLoading;
 
   const handleRun = async () => {
-    setIsLoading(true);
-    updateNodeData(id, { isLoading: true, output: '' });
-
-    try {
-      const { texts, images, systemPrompt } = getConnectedInputs(id);
-      
-      // Build the prompt from connected inputs
-      const combinedText = texts.filter(Boolean).join('\n\n');
-      const userMessage = data.userPrompt 
-        ? `${data.userPrompt}\n\nContext:\n${combinedText}`
-        : combinedText;
-
-      // Simulate LLM call (replace with actual API call when backend is connected)
-      // For now, we'll show a placeholder response
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      const mockResponse = `**Analysis Complete**
-
-Based on the provided inputs${images.length > 0 ? ` and ${images.length} image(s)` : ''}:
-
-${userMessage ? `Your request: "${userMessage.slice(0, 100)}..."` : 'No specific prompt provided.'}
-
-${systemPrompt ? `\nSystem context applied: "${systemPrompt.slice(0, 50)}..."` : ''}
-
----
-
-*Connect to Lovable Cloud to enable real AI processing with Google Gemini.*`;
-
-      updateNodeData(id, { output: mockResponse, isLoading: false });
+    toast.info('Running LLM...');
+    await runLLMNode(id);
+    if (!data.hasError) {
       toast.success('LLM execution complete!');
-    } catch (error) {
-      console.error('LLM Error:', error);
-      toast.error('Failed to execute LLM');
-      updateNodeData(id, { isLoading: false });
-    } finally {
-      setIsLoading(false);
+    } else {
+      toast.error('LLM execution failed');
     }
   };
 
   return (
-    <div className={`node-card min-w-[320px] max-w-[380px] ${selected ? 'node-card-selected' : ''}`}>
+    <div className={`node-card min-w-[320px] max-w-[400px] ${selected ? 'node-card-selected' : ''} ${data.hasError ? 'border-destructive/60' : ''}`}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center">
@@ -63,20 +37,29 @@ ${systemPrompt ? `\nSystem context applied: "${systemPrompt.slice(0, 50)}..."` :
             {data.label || 'Run Any LLM'}
           </span>
         </div>
-        <button
-          onClick={() => deleteNode(id)}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors"
-        >
-          <X className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => duplicateNode(id)}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+            title="Duplicate node"
+          >
+            <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => deleteNode(id)}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+          >
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
       </div>
-      
+
       {/* Input Handles */}
       <Handle
         type="target"
         position={Position.Left}
         id="system_prompt"
-        style={{ top: '25%' }}
+        style={{ top: '30%' }}
         className="!w-3 !h-3 !bg-amber-400 !border-2 !border-background"
       />
       <Handle
@@ -90,7 +73,7 @@ ${systemPrompt ? `\nSystem context applied: "${systemPrompt.slice(0, 50)}..."` :
         type="target"
         position={Position.Left}
         id="images"
-        style={{ top: '75%' }}
+        style={{ top: '70%' }}
         className="!w-3 !h-3 !bg-emerald-400 !border-2 !border-background"
       />
 
@@ -115,7 +98,7 @@ ${systemPrompt ? `\nSystem context applied: "${systemPrompt.slice(0, 50)}..."` :
           placeholder="Enter your prompt here..."
           value={data.userPrompt || ''}
           onChange={(e) => updateNodeData(id, { userPrompt: e.target.value })}
-          className="min-h-[80px] bg-muted/50 border-border/50 resize-none text-sm"
+          className="min-h-[80px] bg-muted/50 border-border/50 resize-none text-sm nodrag"
         />
 
         <Button
@@ -137,9 +120,34 @@ ${systemPrompt ? `\nSystem context applied: "${systemPrompt.slice(0, 50)}..."` :
         </Button>
 
         {data.output && (
-          <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-border/50 max-h-[150px] overflow-y-auto">
-            <p className="text-xs text-muted-foreground mb-1">Output:</p>
-            <p className="text-sm whitespace-pre-wrap">{data.output}</p>
+          <div className={`mt-3 p-3 bg-muted/30 rounded-lg border max-h-[200px] overflow-y-auto nodrag ${data.hasError ? 'border-destructive/50' : 'border-border/50'}`}>
+            <p className="text-xs text-muted-foreground mb-2">Output:</p>
+            <div className="prose prose-sm prose-invert max-w-none text-sm">
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                  code: ({ children }) => (
+                    <code className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono text-primary">
+                      {children}
+                    </code>
+                  ),
+                  pre: ({ children }) => (
+                    <pre className="p-2 bg-muted rounded-lg overflow-x-auto text-xs">
+                      {children}
+                    </pre>
+                  ),
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                  li: ({ children }) => <li className="text-sm">{children}</li>,
+                  h1: ({ children }) => <h1 className="text-base font-bold mb-2">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-sm font-bold mb-1">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+                }}
+              >
+                {data.output}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
       </div>
